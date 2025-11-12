@@ -1,7 +1,11 @@
 import scala.quoted.*
 
-inline def async[F[_]](using m: Monad[F])[A](inline a: A): F[A] =
-  ${ asyncImpl('a)(using 'm) }
+inline def async[F[_]](using Monad[F]) = new InferAsyncArg[F]
+// inline def async[F[_]: Monad] = new InferAsyncArg[F] // This does not work, don't know why
+
+class InferAsyncArg[F[_]: Monad]:
+  inline def apply[A](inline a: A): F[A] =
+    ${ asyncImpl('a)(using '{ summon[Monad[F]] }) }
 
 def asyncImpl[F[_], A](
     a: Expr[A]

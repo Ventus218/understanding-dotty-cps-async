@@ -43,16 +43,13 @@ using a class which "stores" the first type parameter(look at `InferAsyncArg`).
 What they do is something like this:
 
 ```scala
-def async[F[_]: Monad] = InferAsyncArg.apply
+inline def async[F[_]: Monad] = InferAsyncArg.apply
 
 class InferAsyncArg[F[_]: Monad]:
   inline def apply[A](inline a: A): F[A] = ???
 ```
 
-I was able to rewrite the method in a way that it does not need that extra class
-but at this stage my definition is simpler than the one used by dotty-cps-async
-so we should look further into this solution. (It is even possible that this
-kind of syntax is not supported in all versions of scala3)
+In scala >= 3.6.2 this could be rewritten like:
 
 ```scala
 inline def async[F[_]](using Monad[F])[A](inline a: A): F[A] = ???
