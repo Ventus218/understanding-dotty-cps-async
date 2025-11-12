@@ -4,11 +4,11 @@ trait Monad[F[_]]:
   def map[A, B](fa: F[A], f: A => B): F[B] =
     flatMap(fa, a => pure(f(a)))
 
-given Monad[Option]:
+given Monad[Option] with
   def pure[A](a: A): Option[A] = Option(a)
   def flatMap[A, B](fa: Option[A], f: A => Option[B]): Option[B] = fa.flatMap(f)
 
-given Monad[List]:
+given Monad[List] with
   def pure[A](a: A): List[A] = List(a)
   def flatMap[A, B](fa: List[A], f: A => List[B]): List[B] = fa.flatMap(f)
 
