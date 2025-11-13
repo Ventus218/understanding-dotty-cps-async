@@ -12,23 +12,19 @@ def asyncImpl[F[_], A](
 )(using Expr[Monad[F]], Quotes, Type[A], Type[F]): Expr[F[A]] =
   // Type[A] needed because of term.asExprOf[A]
   import quotes.reflect.*
-
   a.asTerm match
-    case Inlined(_, _, term)     => asyncImpl(term.asExprOf[A])
-    case TrivialTransform(ident) => TrivialTransform(ident)
+    case Inlined(_, _, term) => asyncImpl(term.asExprOf[A])
+    // check if Ref is Okay or if only Ident is
+    case t: Ref     => TrivialTransform(t)
+    case t: Literal => TrivialTransform(t)
+    case _ =>
+      println(a.asTerm.toString())
+      ???
 
 object TrivialTransform:
 
-  def unapply[F[_]](using Quotes)(
-      term: quotes.reflect.Term
-  ): Option[quotes.reflect.Term] =
-    import quotes.reflect.*
-    term match
-      case t: Ident   => Some(t)
-      case t: Literal => Some(t)
-
   def apply[F[_]: Type, A: Type](using m: Expr[Monad[F]])(using Quotes)(
-      term: quotes.reflect.Term
+      term: quotes.reflect.Ref | quotes.reflect.Literal
   ): Expr[F[A]] =
     import quotes.reflect.*
     '{ $m.pure(${ term.asExprOf[A] }) }
