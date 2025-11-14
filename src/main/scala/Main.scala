@@ -14,5 +14,34 @@ given Monad[List] with
 
 object Trivial:
   val a = 0
-  val res = async[Option]:
+  val b = async[Option]:
     a
+  val c = async[Option]:
+    ""
+
+object Sequential:
+  val m = summon[Monad[Option]]
+  val a1 = Option:
+    val d = 3
+  val a2 = async[Option]:
+    val d = 3
+
+  val b1 = Option:
+    val d = 3
+    val e = 4
+    val f = e
+  val b2 = async[Option]:
+    val d = 3
+    val e = 4
+    val f = e
+
+  val c1 = Option:
+    val d = 3
+    val e = 4
+    val f = e
+    f
+  val c2 = async[Option]:
+    val d = 3
+    val e = 4
+    val f = e
+    f

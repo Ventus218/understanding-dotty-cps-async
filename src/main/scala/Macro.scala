@@ -17,6 +17,10 @@ def asyncImpl[F[_], A](
     // check if Ref is Okay or if only Ident is
     case t: Ref     => TrivialTransform(t)
     case t: Literal => TrivialTransform(t)
+    case t: Block   => SequentialTransform(t)
+    // some ASTs are wrapped in Typed, here we just unwrap but should check if
+    // there are some unexpected consequences
+    case Typed(t, _) => asyncImpl(t.asExprOf[A])
     case _ =>
       println(a.asTerm.toString())
       ???
@@ -28,3 +32,23 @@ object TrivialTransform:
   ): Expr[F[A]] =
     import quotes.reflect.*
     '{ $m.pure(${ term.asExprOf[A] }) }
+
+object SequentialTransform:
+
+  def apply[F[_]: Type, A: Type](using m: Expr[Monad[F]])(using Quotes)(
+      term: quotes.reflect.Block
+  ): Expr[F[A]] =
+    import quotes.reflect.*
+    loop(term.statements, term.expr)
+
+  private def loop[F[_]: Type, A: Type](using m: Expr[Monad[F]])(using Quotes)(
+      statements: List[quotes.reflect.Statement],
+      expr: quotes.reflect.Term
+  ): Expr[F[A]] =
+    import quotes.reflect.*
+    statements match
+      case head :: next =>
+        val block = Block(List(head), loop(next, expr).asTerm)
+        // TODO: Mapping should be okay as long as we don't have awaits
+        '{ $m.map(${ block.asExprOf[F[A]] }, identity) }
+      case Nil => asyncImpl(expr.asExprOf[A])
