@@ -49,6 +49,6 @@ object SequentialTransform:
     statements match
       case head :: next =>
         val block = Block(List(head), loop(next, expr).asTerm)
-        // TODO: Mapping should be okay as long as we don't have awaits
+        // TODO: Mapping should be okay until we introduce await
         '{ $m.map(${ block.asExprOf[F[A]] }, identity) }
       case Nil => asyncImpl(expr.asExprOf[A])
