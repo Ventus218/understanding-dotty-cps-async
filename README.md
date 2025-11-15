@@ -127,3 +127,43 @@ object Test:
 ```
 
 Right now it is enough to use map since we haven't introduced `await`s yet
+
+## Condition transform
+
+This transformation is responsible for the monadification of `if then else`
+expressions.
+
+```scala
+object ConditionTransform:
+
+  def apply[F[_]: Type, A: Type](using m: Expr[Monad[F]])(using Quotes)(
+      term: quotes.reflect.If
+  ): Expr[F[A]] =
+    import quotes.reflect.*
+    val conditionExpr = asyncImpl(term.cond.asExprOf[Boolean])
+    val lambda = Lambda(
+      Symbol.spliceOwner,
+      MethodType(List("arg"))(
+        _ => List(TypeRepr.of[Boolean]),
+        _ => TypeRepr.of[F[A]]
+      ),
+      (lambdaSymbol, args) =>
+        If(
+          args.head.asInstanceOf[Term],
+          asyncImpl(term.thenp.asExprOf[A]).asTerm.changeOwner(lambdaSymbol),
+          asyncImpl(term.elsep.asExprOf[A]).asTerm.changeOwner(lambdaSymbol)
+        )
+    ).asExprOf[Boolean => F[A]]
+    '{ $m.flatMap($conditionExpr, $lambda) }
+
+object Test:
+  val m = summon[Monad[Option]]
+  async[Option]:
+    if true then 0
+    else 1
+  //becomes:
+  m.flatMap(m.pure(true), arg =>
+    if arg then 0
+    else 1
+  )
+```

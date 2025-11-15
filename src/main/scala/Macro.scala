@@ -18,11 +18,12 @@ def asyncImpl[F[_], A](
     case t: Ref     => TrivialTransform(t)
     case t: Literal => TrivialTransform(t)
     case t: Block   => SequentialTransform(t)
+    case t: If      => ConditionTransform(t)
     // some ASTs are wrapped in Typed, here we just unwrap but should check if
     // there are some unexpected consequences
     case Typed(t, _) => asyncImpl(t.asExprOf[A])
     case _ =>
-      println(a.asTerm.toString())
+      println(a.asTerm)
       ???
 
 object TrivialTransform:
@@ -52,3 +53,25 @@ object SequentialTransform:
         // TODO: Mapping should be okay until we introduce await
         '{ $m.map(${ block.asExprOf[F[A]] }, identity) }
       case Nil => asyncImpl(expr.asExprOf[A])
+
+object ConditionTransform:
+
+  def apply[F[_]: Type, A: Type](using m: Expr[Monad[F]])(using Quotes)(
+      term: quotes.reflect.If
+  ): Expr[F[A]] =
+    import quotes.reflect.*
+    val conditionExpr = asyncImpl(term.cond.asExprOf[Boolean])
+    val lambda = Lambda(
+      Symbol.spliceOwner,
+      MethodType(List("arg"))(
+        _ => List(TypeRepr.of[Boolean]),
+        _ => TypeRepr.of[F[A]]
+      ),
+      (lambdaSymbol, args) =>
+        If(
+          args.head.asInstanceOf[Term],
+          asyncImpl(term.thenp.asExprOf[A]).asTerm.changeOwner(lambdaSymbol),
+          asyncImpl(term.elsep.asExprOf[A]).asTerm.changeOwner(lambdaSymbol)
+        )
+    ).asExprOf[Boolean => F[A]]
+    '{ $m.flatMap($conditionExpr, $lambda) }

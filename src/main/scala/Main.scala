@@ -12,6 +12,8 @@ given Monad[List] with
   def pure[A](a: A): List[A] = List(a)
   def flatMap[A, B](fa: List[A], f: A => List[B]): List[B] = fa.flatMap(f)
 
+val m = summon[Monad[Option]]
+
 object Trivial:
   val a = 0
   val b = async[Option]:
@@ -20,7 +22,6 @@ object Trivial:
     ""
 
 object Sequential:
-  val m = summon[Monad[Option]]
   val a1 = Option:
     val d = 3
   val a2 = async[Option]:
@@ -45,3 +46,16 @@ object Sequential:
     val e = 4
     val f = e
     f
+
+object Condition:
+  val a1 = Option:
+    val cond = true
+    if cond then 0
+    else 1
+  val a2 = async[Option]:
+    if true then 0
+    else 1
+  val a3 = async[Option]:
+    val cond = true
+    if cond then 0
+    else 1
