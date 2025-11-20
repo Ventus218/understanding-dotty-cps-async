@@ -17,9 +17,10 @@ def asyncImpl[F[_], A](
     // check if Ref is Okay or if only Ident is
     case t: Ref     => TrivialTransform(t)
     case t: Literal => TrivialTransform(t)
-    case t: Block   => SequentialTransform(t)
-    case t: If      => ConditionTransform(t)
-    case t: Apply   => FunctionApplicationTransform(t)
+    // case Lambda(params, body) => LambdaTransform(params, body)
+    case t: Block => SequentialTransform(t)
+    case t: If    => ConditionTransform(t)
+    case t: Apply => FunctionApplicationTransform(t)
     // some ASTs are wrapped in Typed, here we just unwrap but should check if
     // there are some unexpected consequences
     case Typed(t, _) => asyncImpl(t.asExprOf[A])
@@ -143,6 +144,34 @@ object FunctionApplicationTransform:
             ).asExprOf[t => F[A]]
             '{ $m.flatMap($argExpr, $lambda) }
       case Nil => '{ $m.pure(${ Apply(f, transformedArgs).asExprOf[A] }) }
+
+// object LambdaTransform:
+//   // Lambda is convenient for apply and unapply but it actually is a Block with a DefDef and a Closure
+//   def apply[F[_]: Type, A: Type](using m: Expr[Monad[F]])(using Quotes)(
+//       params: List[quotes.reflect.ValDef],
+//       body: quotes.reflect.Term
+//   ): Expr[F[A]] =
+//     import quotes.reflect.*
+//     body.tpe.asType match
+//       case '[bodyT] =>
+//         Lambda(
+//           Symbol.spliceOwner,
+//           MethodType(params.map(_.name))(
+//             _ => params.map(_.tpt.tpe),
+//             _ => TypeRepr.of[F[A]]
+//           ),
+//           (lambdaSymbol, args) =>
+//             body.changeOwner(lambdaSymbol)
+//             val newBody = params
+//               .zip(args)
+//               .foldLeft(body)((body, params) =>
+//                 val (old, new_) = params
+//                 Utils
+//                   .refsSymbolSubstitutor(old.symbol, new_.symbol)
+//                   .transformTerm(body)(lambdaSymbol)
+//               )
+//             asyncImpl(newBody.asExpr).asTerm.changeOwner(lambdaSymbol)
+//         ).asExprOf[F[A]]
 
 object Utils:
 

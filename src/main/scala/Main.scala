@@ -90,6 +90,11 @@ object FunctionApplication:
   val g2 = async[Option]:
     myF(1, 2, 3)
 
+// object Lambda:
+//   val a = async[Option]:
+//     print("hello")
+//     (a: Int) => a + 1
+
 object Condition:
   val a1 = Option:
     val cond = true
