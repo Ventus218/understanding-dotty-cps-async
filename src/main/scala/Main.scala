@@ -107,3 +107,13 @@ object Condition:
     val cond = true
     if cond then 0
     else 1
+
+object ExampleOfHowManyEdgeCasesNeedToBeHandled:
+  async[Option]:
+    val a = List.empty[Int]
+    val b = a :+ 1
+    val c = b :+ 1
+    c
+  // async[Option]:
+  //   val a = List(1, 2, 3) // Varargs are Repeated terms
+  //   a

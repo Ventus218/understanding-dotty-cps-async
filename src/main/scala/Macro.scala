@@ -13,7 +13,6 @@ def asyncImpl[F[_], A](
   // Type[A] needed because of term.asExprOf[A]
   import quotes.reflect.*
   a.asTerm match
-    case Inlined(_, _, term) => asyncImpl(term.asExprOf[A])
     // check if Ref is Okay or if only Ident is
     case t: Ref     => TrivialTransform(t)
     case t: Literal => TrivialTransform(t)
@@ -21,9 +20,10 @@ def asyncImpl[F[_], A](
     case t: Block => SequentialTransform(t)
     case t: If    => ConditionTransform(t)
     case t: Apply => FunctionApplicationTransform(t)
-    // some ASTs are wrapped in Typed, here we just unwrap but should check if
-    // there are some unexpected consequences
-    case Typed(t, _) => asyncImpl(t.asExprOf[A])
+    // Not 100% sure about the correctness of the following transforms
+    case Inlined(_, _, term) => asyncImpl(term.asExprOf[A])
+    case t: TypeApply        => TrivialTransform(t)
+    case t: Typed            => TrivialTransform(t)
     case _ =>
       println(a.asTerm)
       ???
@@ -31,7 +31,8 @@ def asyncImpl[F[_], A](
 object TrivialTransform:
 
   def apply[F[_]: Type, A: Type](using m: Expr[Monad[F]])(using Quotes)(
-      term: quotes.reflect.Ref | quotes.reflect.Literal
+      term: quotes.reflect.Ref | quotes.reflect.Literal |
+        quotes.reflect.TypeApply | quotes.reflect.Typed
   ): Expr[F[A]] =
     import quotes.reflect.*
     '{ $m.pure(${ term.asExprOf[A] }) }
