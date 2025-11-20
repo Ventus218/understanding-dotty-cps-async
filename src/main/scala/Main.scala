@@ -47,6 +47,49 @@ object Sequential:
     val f = e
     f
 
+object FunctionApplication:
+  // val d1 = async[Option]:
+  //   print("hello")
+  //   val d = 3
+  //   val f = d
+  //   f
+  // val d2 = async[Option]:
+  //   val d = 3
+  //   print("hello")
+  //   val f = d
+  //   f
+  val d3 = async[Option]:
+    val d = 3
+    val f = d
+    println("hello")
+  // val d4 = async[Option]:
+  //   val d = "3"
+  //   val f = d
+  //   println(d)
+  // val d5 = async[Option]:
+  //   val d = "3"
+  //   val f = d
+  //   println()
+  //
+  // val e = async[Option]:
+  //   val d = 3
+  //   val f = d
+  //   f.toString()
+  //
+  // val f = async[Option]:
+  //   val a = "a"
+  //   val b = "b"
+  //   a + b
+  //
+  // def myF(d: Int, e: Int, f: Int) = d + e + f
+  // val g1 = async[Option]:
+  //   val a = 1
+  //   val b = 2
+  //   val c = 3
+  //   myF(a, b, c)
+  // val g2 = async[Option]:
+  //   myF(1, 2, 3)
+  //
 object Condition:
   val a1 = Option:
     val cond = true

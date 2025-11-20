@@ -19,6 +19,7 @@ def asyncImpl[F[_], A](
     case t: Literal => TrivialTransform(t)
     case t: Block   => SequentialTransform(t)
     case t: If      => ConditionTransform(t)
+    case t: Apply   => FunctionApplicationTransform(t)
     // some ASTs are wrapped in Typed, here we just unwrap but should check if
     // there are some unexpected consequences
     case Typed(t, _) => asyncImpl(t.asExprOf[A])
@@ -105,6 +106,43 @@ object ConditionTransform:
         )
     ).asExprOf[Boolean => F[A]]
     '{ $m.flatMap($conditionExpr, $lambda) }
+
+object FunctionApplicationTransform:
+  def apply[F[_]: Type, A: Type](using m: Expr[Monad[F]])(using Quotes)(
+      term: quotes.reflect.Apply
+  ): Expr[F[A]] =
+    import quotes.reflect.*
+    loop(term.fun, term.args)
+
+  def loop[F[_]: Type, A: Type](using m: Expr[Monad[F]])(using Quotes)(
+      f: quotes.reflect.Term,
+      args: List[quotes.reflect.Term],
+      transformedArgs: List[quotes.reflect.Term] = List()
+  ): Expr[F[A]] =
+    import quotes.reflect.*
+    args match
+      case arg :: next =>
+        arg.tpe.asType match
+          case '[t] =>
+            val argExpr = asyncImpl(arg.asExprOf[t])
+            val lambda = Lambda(
+              Symbol.spliceOwner,
+              MethodType(List(arg.symbol.name))(
+                _ => List(arg.tpe),
+                _ => TypeRepr.of[F[A]]
+              ),
+              (lambdaSymbol, args) =>
+                // We know there will be one arg due to the MethodType.
+                // Cast SHOULD be safe as that's what they also do in the doc
+                // there is an open issue on that:
+                // https://github.com/scala/scala3/issues/23038
+                val arg = args.head.asInstanceOf[Term]
+                loop[F, A](f, next, transformedArgs :+ arg).asTerm.changeOwner(
+                  lambdaSymbol
+                )
+            ).asExprOf[t => F[A]]
+            '{ $m.flatMap($argExpr, $lambda) }
+      case Nil => '{ $m.pure(${ Apply(f, transformedArgs).asExprOf[A] }) }
 
 object Utils:
 
