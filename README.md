@@ -167,3 +167,76 @@ object Test:
     else 1
   )
 ```
+
+## Function application transform
+
+Up to now we've only implemented the function application transform when the
+function arguments are non-functional types.
+
+```scala
+object FunctionApplicationTransform:
+  def apply[F[_]: Type, A: Type](using m: Expr[Monad[F]])(using Quotes)(
+      term: quotes.reflect.Apply
+  ): Expr[F[A]] =
+    import quotes.reflect.*
+    loop(term.fun, term.args)
+
+  def loop[F[_]: Type, A: Type](using m: Expr[Monad[F]])(using Quotes)(
+      f: quotes.reflect.Term,
+      args: List[quotes.reflect.Term],
+      transformedArgs: List[quotes.reflect.Term] = List()
+  ): Expr[F[A]] =
+    import quotes.reflect.*
+    args match
+      case arg :: next =>
+        arg.tpe.asType match
+          case '[t] =>
+            val argExpr = asyncImpl(arg.asExprOf[t])
+            val lambda = Lambda(
+              Symbol.spliceOwner,
+              MethodType(List(arg.symbol.name))(
+                _ => List(arg.tpe),
+                _ => TypeRepr.of[F[A]]
+              ),
+              (lambdaSymbol, args) =>
+                // We know there will be one arg due to the MethodType.
+                // Cast SHOULD be safe as that's what they also do in the doc
+                // there is an open issue on that:
+                // https://github.com/scala/scala3/issues/23038
+                val arg = args.head.asInstanceOf[Term]
+                loop[F, A](f, next, transformedArgs :+ arg).asTerm.changeOwner(
+                  lambdaSymbol
+                )
+            ).asExprOf[t => F[A]]
+            '{ $m.flatMap($argExpr, $lambda) }
+      case Nil => '{ $m.pure(${ Apply(f, transformedArgs).asExprOf[A] }) }
+```
+
+To transform a function application in continuation passing style we just need
+to transform each argument one by one and for each argument we introduce a
+flatMap nesting level.
+
+```scala
+  val m = summon[Monad[Option]]
+
+  def myF(a: Int, b: Int, c: Int) = a + b + c
+
+  async[Option]:
+    myF(1, 2, 3)
+  // becomes:
+  m.flatMap(
+    m.pure(1),
+    a =>
+      m.flatMap(
+        m.pure(2),
+        b =>
+          m.flatMap(
+            m.pure(3),
+            c =>
+              m.pure(
+                myF(a, b, c)
+              )
+          )
+      )
+  )
+```
