@@ -9,7 +9,7 @@ class InferAsyncArg[F[_]: Monad]:
 
 def asyncImpl[F[_], A](
     a: Expr[A]
-)(using Expr[Monad[F]], Quotes, Type[A], Type[F]): Expr[F[A]] =
+)(using m: Expr[Monad[F]])(using Quotes, Type[A], Type[F]): Expr[F[A]] =
   // Type[A] needed because of term.asExprOf[A]
   import quotes.reflect.*
   a.asTerm match
@@ -21,9 +21,14 @@ def asyncImpl[F[_], A](
     case t: If    => ConditionTransform(t)
     case t: Apply => FunctionApplicationTransform(t)
     // Not 100% sure about the correctness of the following transforms
-    case Inlined(_, _, term) => asyncImpl(term.asExprOf[A])
-    case t: TypeApply        => TrivialTransform(t)
-    case t: Typed            => TrivialTransform(t)
+    case Inlined(call, bindings, term) =>
+      Inlined(call, bindings, asyncImpl(term.asExprOf[A]).asTerm)
+        .asExprOf[F[A]]
+    case t: TypeApply =>
+      '{ $m.pure(${ t.asExprOf[A] }) }
+    case Typed(term, _) =>
+      Typed(asyncImpl(term.asExprOf[A]).asTerm, TypeTree.of[F[A]])
+        .asExprOf[F[A]]
     case _ =>
       println(a.asTerm)
       ???
@@ -31,8 +36,7 @@ def asyncImpl[F[_], A](
 object TrivialTransform:
 
   def apply[F[_]: Type, A: Type](using m: Expr[Monad[F]])(using Quotes)(
-      term: quotes.reflect.Ref | quotes.reflect.Literal |
-        quotes.reflect.TypeApply | quotes.reflect.Typed
+      term: quotes.reflect.Ref | quotes.reflect.Literal
   ): Expr[F[A]] =
     import quotes.reflect.*
     '{ $m.pure(${ term.asExprOf[A] }) }
