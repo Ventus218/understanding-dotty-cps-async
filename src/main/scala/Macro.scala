@@ -1,3 +1,4 @@
+package lib
 import scala.quoted.*
 
 inline def async[F[_]](using Monad[F]) = new InferAsyncArg[F]
