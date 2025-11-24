@@ -14,6 +14,14 @@ def asyncImpl[F[_], A](
   // Type[A] needed because of term.asExprOf[A]
   import quotes.reflect.*
   a.asTerm match
+    case Apply(Apply(TypeApply(f, typeArgs), args), contextArgs)
+        // def await[F[_], A](fa: F[A])(using Monad[F]): A
+        // So:
+        //   typeArgs    -> [F, A]
+        //   args        -> fa: F[A]
+        //   contextArgs -> given_Monad_F: Monad[F]
+        if f.symbol == Symbol.requiredMethod("lib.await") =>
+      args.head.asExprOf[F[A]]
     // check if Ref is Okay or if only Ident is
     case t: Ref     => TrivialTransform(t)
     case t: Literal => TrivialTransform(t)

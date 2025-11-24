@@ -104,12 +104,50 @@ object Condition:
     if cond then 0
     else 1
 
-object ExampleOfHowManyEdgeCasesNeedToBeHandled:
-  async[Option]:
-    val a = List.empty[Int]
-    val b = a :+ 1
-    val c = b :+ 1
-    c
-  // async[Option]:
-  //   val a = List(1, 2, 3) // Varargs are Repeated terms
-  //   a
+object Await extends App:
+  val a1 = async[Option]:
+    // why Some does not work?
+    // It doesn't in dotty-cps-async as well but you can provide a MonadConversion
+    // await(Some(3))
+    await(Option(3))
+  println(a1)
+  val a2 = async[Option]:
+    val opt = Option(3)
+    await(opt)
+  println(a2)
+  val b1 = async[Option]:
+    await(None)
+  println(b1)
+  val c1 = async[Option]:
+    val a = await(Option(4))
+    val b = await(Option(5))
+    val c = await(Option.empty)
+    a + b
+  println(c1)
+  val c2 = async[Option]:
+    val a = await(Option(4))
+    // in dotty-cps-async you need to specify the type parameter as well
+    val b = await(Option.empty[Int])
+    val c = await(Option(5))
+    a + b
+  println(c2)
+  val c3 = async[Option]:
+    val a = await(Option(4))
+    val b = await(Option(5))
+    a + b
+  println(c3)
+
+  val d1 = async[List]:
+    val a = await(List(1, 2, 3))
+    val b = await(List(4, 5, 6))
+    a.toString() + " " + b.toString()
+  println(d1)
+  // The following example does not compile as i don't handle Repeated (varargs)
+  // in the macro.
+  // I leave this here as an example of how many different language constructs
+  // must be handled to achieve 100% coverage.
+  // val d2 = async[List]:
+  //   val l = List(1, 2, 3)
+  //   val a = await(l)
+  //   val b = await(List(4, 5, 6))
+  //   a.toString() + " " + b.toString()
