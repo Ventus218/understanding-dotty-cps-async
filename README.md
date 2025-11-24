@@ -240,3 +240,61 @@ flatMap nesting level.
       )
   )
 ```
+
+## Handling awaits
+
+The rationale is that since in the cps transform we always "wrap" expressions
+inside the `F` monad in order to `flatMap` on them, if we have an expression
+`fa` that is already "wrapped" we should just do nothing.
+
+```scala
+val m = summon[Monad[Option]]
+
+async[Option]:
+  val a = await(Option(4))
+  val b = await(Option(5))
+  a + b
+// becomes:
+m.flatMap(
+  Option(4),
+  a =>
+    m.flatMap(
+      Option(5),
+      b => m.pure(a + b)
+    )
+  )
+```
+
+And this is how we can do that:
+
+```scala
+// Await.scala
+def await[F[_]: Monad, A](fa: F[A]): A = ???
+
+// Async.scala
+def asyncImpl[F[_], A](a: Expr[A])
+  (using m: Expr[Monad[F]])(using Quotes, Type[A], Type[F]): Expr[F[A]] =
+  import quotes.reflect.*
+  a.asTerm match
+    case Apply(Apply(TypeApply(f, typeArgs), args), contextArgs)
+        // So:
+        //   typeArgs    -> [F, A]
+        //   args        -> fa: F[A]
+        //   contextArgs -> given_Monad_F: Monad[F]
+        if f.symbol == Symbol.requiredMethod("lib.await") =>
+      args.head.asExprOf[F[A]]
+  // ...
+```
+
+> Notice that `await` is actually an unimplemented function which is used just
+> as a marker that is then processed iside the `asyncImpl` macro.
+
+In order to match on our `await` marker we need to understand what is the actual
+signature of `await`
+
+```scala
+def await[F[_]: Monad, A](fa: F[A]): A
+// is just syntactic sugar for
+def await[F[_], A](fa: F[A])(using Monad[F]): A
+// which is a curried function and that's why we need to match on Apply(Apply(...))
+```
