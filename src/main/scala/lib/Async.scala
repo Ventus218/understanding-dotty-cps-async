@@ -94,6 +94,21 @@ object SequentialTransform:
                   )
             ).asExprOf[t => F[A]]
             '{ $m.flatMap($rhsExpr, $lambda) }
+      case (head: Term) :: next =>
+        head.tpe.asType match
+          case '[t] =>
+            val termExpr = asyncImpl(head.asExprOf[t])
+            val lambda = Lambda(
+              Symbol.spliceOwner,
+              MethodType(List("_"))(
+                _ => List(TypeRepr.of[t]),
+                _ => TypeRepr.of[F[A]]
+              ),
+              (lambdaSymbol, args) =>
+                // Automatic inference is not able to get the right type parameters
+                loop[F, A](next, expr).asTerm.changeOwner(lambdaSymbol)
+            ).asExprOf[t => F[A]]
+            '{ $m.flatMap($termExpr, $lambda) }
       case head :: next =>
         val block = Block(List(head), loop(next, expr).asTerm)
         '{ $m.flatMap(${ block.asExprOf[F[A]] }, $m.pure) }

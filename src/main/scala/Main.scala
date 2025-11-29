@@ -43,6 +43,16 @@ object Sequential:
     val f = e
     f
 
+  val d1 = async[Option]:
+    def a(v: Int) = v + 1
+    def b(v: Int) = v + 2
+    a(3)
+
+  val e1 = async[Option]:
+    println("hello")
+    println("sequential")
+    3
+
 object FunctionApplication:
   val d1 = async[Option]:
     print("hello")

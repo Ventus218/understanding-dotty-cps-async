@@ -72,12 +72,7 @@ object TrivialTransform:
 ## Sequential transform
 
 This transformation is responsible for the monadification of sequential blocks
-of code.
-
-The simplest way to do so is by transforming the block in CPS where each
-statement introduce a new nesting level. (dotty-cps-async uses an optimization
-where multiple subsequent statements without `await`s are combined at the same
-nesting level)
+of code. Blocks are composed of a list of `statements` and a final `expression`.
 
 ```scala
 object SequentialTransform:
@@ -94,39 +89,160 @@ object SequentialTransform:
   ): Expr[F[A]] =
     import quotes.reflect.*
     statements match
+      case (valDef @ ValDef(name, typeTree, Some(rhs))) :: next =>
+        typeTree.tpe.asType match
+          case '[t] =>
+            val rhsExpr = asyncImpl(rhs.asExprOf[t])
+            val lambda = Lambda(
+              Symbol.spliceOwner,
+              MethodType(List(name))(
+                _ => List(typeTree.tpe),
+                _ => TypeRepr.of[F[A]]
+              ),
+              (lambdaSymbol, args) =>
+                val nextSymbolsChanged =
+                  next.map(n =>
+                    Utils
+                      .refsSymbolSubstitutor(valDef.symbol, args.head.symbol)
+                      .transformTree(n)(n.symbol)
+                      .asInstanceOf[Statement]
+                  )
+                val exprSymbolsChanged =
+                  Utils
+                    .refsSymbolSubstitutor(valDef.symbol, args.head.symbol)
+                    .transformTree(expr)(expr.symbol)
+                    .asInstanceOf[Term]
+                // Automatic inference is not able to get the right type parameters
+                loop[F, A](nextSymbolsChanged, exprSymbolsChanged).asTerm
+                  .changeOwner(
+                    lambdaSymbol
+                  )
+            ).asExprOf[t => F[A]]
+            '{ $m.flatMap($rhsExpr, $lambda) }
+      case (head: Term) :: next =>
+        head.tpe.asType match
+          case '[t] =>
+            val termExpr = asyncImpl(head.asExprOf[t])
+            val lambda = Lambda(
+              Symbol.spliceOwner,
+              MethodType(List("_"))(
+                _ => List(TypeRepr.of[t]),
+                _ => TypeRepr.of[F[A]]
+              ),
+              (lambdaSymbol, args) =>
+                // Automatic inference is not able to get the right type parameters
+                loop[F, A](next, expr).asTerm.changeOwner(lambdaSymbol)
+            ).asExprOf[t => F[A]]
+            '{ $m.flatMap($termExpr, $lambda) }
       case head :: next =>
         val block = Block(List(head), loop(next, expr).asTerm)
-        // TODO: Mapping should be okay until we introduce await
-        '{ $m.map(${ block.asExprOf[F[A]] }, identity) }
-      case Nil => asyncImpl(expr.asExprOf[A])
+        '{ $m.flatMap(${ block.asExprOf[F[A]] }, $m.pure) }
+      case Nil =>
+        asyncImpl(expr.asExprOf[A])
+```
 
+Here is the type hirearchy of a `Statement`:
+
+```
++- Statement -+- Import
+              +- Export
+              +- Definition --+- ClassDef
+              |               +- TypeDef
+              |               +- ValOrDefDef -+- DefDef
+              |                               +- ValDef
+              |
+              +- Term
+```
+
+To keep it simple we only support `ValDef` and `Term` while all the other
+constructs are handled by keeping the first statement as is and introduce a new
+nesting level for the following statements (dotty-cps-async uses an optimization
+where multiple subsequent statements without `await`s are combined at the same
+nesting level):
+
+```scala
 object Test:
   val m = summon[Monad[Option]]
   async[Option]:
-    val d = 3
-    val e = 4
-    val f = e
-    f
+    def a(v: Int) = v + 1
+    def b(v: Int) = v + 2
+    a(3)
   // becomes:
-  m.map({
-      val d = 3
-      m.map({
-          val e = 4
-          m.map({
-              val f = e
-              m.pure(f)
-          },
-          identity
-          )
-      },
-      identity
+  m.flatMap({
+    def a(v: Int) = v + 1
+    m.flatMap({
+      def b(v: Int) = v + 2
+      m.flatMap(
+        m.flatMap(m.pure(3)),
+        v => m.pure(a(v))
       )
+    },
+    m.pure
+    )
   },
-  identity
+  m.pure
   )
 ```
 
-Right now it is enough to use map since we haven't introduced `await`s yet
+`ValDef`s are handled by applying the transform to the right-hand side of the
+`val` definition and then `flatMap` on that passing the continuation:
+
+```scala
+object Test:
+  val m = summon[Monad[Option]]
+  async[Option]:
+    val a = 1
+    val b = 2
+    a
+  // becomes:
+  m.flatMap(
+    m.pure(1),
+    a => {
+      m.flatMap(
+        m.pure(2),
+        b => {
+          m.pure(a)
+        }
+      )
+    }
+  )
+```
+
+We also handle the case in which statements are `Term`s. In the frame of
+functional programming `Term`s in statements position are not relevant, but
+dotty-cps-async doesn't prohibit having side effects. An example of `Term` in
+statement position could be a `println`.
+
+The way we handle `Term`s is in principle identical to the way we handled
+`ValDef`s. The implementation is actually simpler because when dealing with
+`ValDef`s we needed to handle the newly introduced symbol while in this case
+there's no need for that.
+
+```scala
+object Test:
+  val m = summon[Monad[Option]]
+  async[Option]:
+    println("hello")
+    println("sequential")
+    0
+  // becomes:
+  m.flatMap(
+    m.pure(println("hello")),
+    _ => {
+      m.flatMap(
+        m.pure(println("sequential")),
+        _ => {
+          m.pure(0)
+        }
+      )
+    }
+  )
+```
+
+> Note that the previous example explains the idea behind this transformation,
+> the actual resulting code would be different since applying the cps transform
+> to `println` will trigger the
+> [function application transform](#function-application-transform)
 
 ## Condition transform
 
