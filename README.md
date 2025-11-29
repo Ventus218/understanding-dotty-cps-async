@@ -376,6 +376,7 @@ m.flatMap(
   a =>
     m.flatMap(
       Option(5),
+      // Note that a + b will actually be transformed according to the function application transform
       b => m.pure(a + b)
     )
   )
