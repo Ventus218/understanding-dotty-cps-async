@@ -1,4 +1,5 @@
 import lib.*
+import scala.concurrent.*
 
 given Monad[Option] with
   def pure[A](a: A): Option[A] = Option(a)
@@ -7,6 +8,11 @@ given Monad[Option] with
 given Monad[List] with
   def pure[A](a: A): List[A] = List(a)
   def flatMap[A, B](fa: List[A], f: A => List[B]): List[B] = fa.flatMap(f)
+
+given (using ec: ExecutionContext): Monad[Future] with
+  def pure[A](a: A): Future[A] = Future(a)(using ec)
+  def flatMap[A, B](fa: Future[A], f: A => Future[B]): Future[B] =
+    fa.flatMap(f)(using ec)
 
 val m = summon[Monad[Option]]
 
@@ -161,3 +167,21 @@ object Await extends App:
   //   val a = await(l)
   //   val b = await(List(4, 5, 6))
   //   a.toString() + " " + b.toString()
+
+  // ********** Testing futures chaining **********
+  Future({ Thread.sleep(20); println("before") })
+  Future(println("after"))
+  // prints:
+  // after
+  // before
+  // It is clear that the futures are executed concurrently as they are eager
+  println()
+  Thread.sleep(50)
+  given ExecutionContext = ExecutionContext.Implicits.global
+  async[Future]:
+    await(Future({ Thread.sleep(20); println("before") }))
+    await(Future(println("after")))
+    // prints:
+    // before
+    // after
+    // It is clear that the second future is executed after the first one completes
