@@ -447,3 +447,22 @@ object WhileTransform:
 The helper is the actual heart of the transformation, notice that `cond` and
 `body` are passed by name so that they can be re-evaluated multiple times after
 the global state has changed.
+
+Here a nice example of using while within the State monad:
+
+```scala
+type IntState[A] = State[Int, A]
+println:
+  async[IntState] {
+    while 10 > await(State.get[Int]) do
+      await(State.modify[Int](_ + 1))
+  }.run(0)
+// The same as
+println:
+  async[IntState] {
+    while 10 > await(State.get[Int]) do
+      val s = await(State.get[Int])
+      await(State.set(s + 1))
+}.run(0)
+// Both print (10, ()) where 10 is the current state
+```

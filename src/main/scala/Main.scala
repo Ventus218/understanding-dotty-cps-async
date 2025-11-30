@@ -1,5 +1,6 @@
 import lib.*
 import scala.concurrent.*
+import State.*
 
 given Monad[Option] with
   def pure[A](a: A): Option[A] = Option(a)
@@ -13,6 +14,11 @@ given (using ec: ExecutionContext): Monad[Future] with
   def pure[A](a: A): Future[A] = Future(a)(using ec)
   def flatMap[A, B](fa: Future[A], f: A => Future[B]): Future[B] =
     fa.flatMap(f)(using ec)
+
+given [S]: Monad[[A] =>> State[S, A]] with
+  def pure[A](a: A): State[S, A] = State.pure(a)
+  def flatMap[A, B](fa: State[S, A], f: A => State[S, B]): State[S, B] =
+    fa.flatMap(f)
 
 val m = summon[Monad[Option]]
 
@@ -192,6 +198,20 @@ object Await extends App:
 // That completion is delayed by the Thread.sleep and then the two Future
 // computation start simultaneously which is not what we want for this example
 @main def whileTest: Unit =
+
+  type IntState[A] = State[Int, A]
+  println:
+    async[IntState] {
+      while 10 > await(State.get[Int]) do await(State.modify[Int](_ + 1))
+    }.run(0)
+  // The same as
+  println:
+    async[IntState] {
+      while 10 > await(State.get[Int]) do
+        val s = await(State.get[Int])
+        await(State.set(s + 1))
+    }.run(0)
+
   given ExecutionContext = ExecutionContext.Implicits.global
 
   var count = 0
