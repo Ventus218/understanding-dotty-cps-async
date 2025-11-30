@@ -415,3 +415,35 @@ def await[F[_]: Monad, A](fa: F[A]): A
 def await[F[_], A](fa: F[A])(using Monad[F]): A
 // which is a curried function and that's why we need to match on Apply(Apply(...))
 ```
+
+## While transform
+
+This transformation implies transforming the while condition and body and then
+using a helper to mimic iteration through recursion:
+
+```scala
+object WhileTransform:
+  def apply[F[_]: Type, A: Type](using m: Expr[Monad[F]])(using Quotes)(
+      term: quotes.reflect.While
+  ): Expr[F[A]] =
+    import quotes.reflect.*
+    val conditionExpr = asyncImpl(term.cond.asExprOf[Boolean])
+    // We can safely assume while body is Unit
+    val bodyExpr = asyncImpl(term.body.asExprOf[Unit])
+    '{ whileHelper($conditionExpr, $bodyExpr)(using $m) }.asExprOf[F[A]]
+
+  private def whileHelper[F[_]](
+      cond: => F[Boolean],
+      body: => F[Unit]
+  )(using m: Monad[F]): F[Unit] =
+    m.flatMap(
+      cond,
+      evaluatedCond =>
+        if (evaluatedCond) then m.flatMap(body, _ => whileHelper(cond, body))
+        else m.pure(())
+    )
+```
+
+The helper is the actual heart of the transformation, notice that `cond` and
+`body` are passed by name so that they can be re-evaluated multiple times after
+the global state has changed.

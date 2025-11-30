@@ -29,6 +29,7 @@ def asyncImpl[F[_], A](
     case t: Block => SequentialTransform(t)
     case t: If    => ConditionTransform(t)
     case t: Apply => FunctionApplicationTransform(t)
+    case t: While => WhileTransform(t)
     // Not 100% sure about the correctness of the following transforms
     case Inlined(call, bindings, term) =>
       Inlined(call, bindings, asyncImpl(term.asExprOf[A]).asTerm)
@@ -201,6 +202,27 @@ object FunctionApplicationTransform:
 //               )
 //             asyncImpl(newBody.asExpr).asTerm.changeOwner(lambdaSymbol)
 //         ).asExprOf[F[A]]
+
+object WhileTransform:
+  def apply[F[_]: Type, A: Type](using m: Expr[Monad[F]])(using Quotes)(
+      term: quotes.reflect.While
+  ): Expr[F[A]] =
+    import quotes.reflect.*
+    val conditionExpr = asyncImpl(term.cond.asExprOf[Boolean])
+    // We can safely assume while body is Unit
+    val bodyExpr = asyncImpl(term.body.asExprOf[Unit])
+    '{ whileHelper($conditionExpr, $bodyExpr)(using $m) }.asExprOf[F[A]]
+
+  private def whileHelper[F[_]](
+      cond: => F[Boolean],
+      body: => F[Unit]
+  )(using m: Monad[F]): F[Unit] =
+    m.flatMap(
+      cond,
+      evaluatedCond =>
+        if (evaluatedCond) then m.flatMap(body, _ => whileHelper(cond, body))
+        else m.pure(())
+    )
 
 object Utils:
 

@@ -185,3 +185,35 @@ object Await extends App:
     // before
     // after
     // It is clear that the second future is executed after the first one completes
+
+// We use a def since an object would allow accessing at his resources
+// (in this case the given instance and the count var only after his init
+// has completed.
+// That completion is delayed by the Thread.sleep and then the two Future
+// computation start simultaneously which is not what we want for this example
+@main def whileTest: Unit =
+  given ExecutionContext = ExecutionContext.Implicits.global
+
+  var count = 0
+  async[Future]:
+    while count < 10 do
+      await(Future(println(count)))
+      await(Future(count += 1))
+      await(Future(Thread.sleep(50)))
+
+  Thread.sleep(1000)
+
+  def randomFuture(): Future[Boolean] =
+    println("producing random boolean")
+    Future(scala.util.Random.nextInt(5) != 0) // P = 4/5
+  count = 0
+  async[Future]:
+    while await(randomFuture()) do
+      await(Future(println(count)))
+      await(Future(count += 1))
+      await(Future(Thread.sleep(50)))
+
+  Thread.sleep(1000)
+
+  async[Future]:
+    while false do await(Future(println("never executed")))
