@@ -1,4 +1,14 @@
-# Notes
+# Understanding dotty-cps-async
+
+The aim of this repo is to try to reimplement
+[dotty-cps-async](https://github.com/dotty-cps-async/dotty-cps-async#dotty-cps-async)
+in order to better understand how it works.
+
+Regarding the theory i referred mostly to
+[Project Paper: Embedding generic monadic transformer into Scala](https://ar5iv.labs.arxiv.org/html/2209.10941).
+
+For the implementation part i focused on trying to do it by myself and after
+that compare it to what has been done in dotty-cps-async
 
 ## Inferring the async argument type
 
