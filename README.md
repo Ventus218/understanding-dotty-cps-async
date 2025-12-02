@@ -12,8 +12,8 @@ that compare it to what has been done in dotty-cps-async.
 
 ## Introduction
 
-What we want to achieve is to be able to turn any monadic program into a
-direct-style program.
+What we want to achieve is to be able to turn any direct-style program into a
+monadic program.
 
 This should ease the use of monads for anybody used to the imperative
 programming paradigm while still keeping most of the benefits of functional
@@ -50,8 +50,8 @@ explicitating when the specific monad behaviour happens (in case of the `Future`
 monad that behaviour is suspension of the control flow without busy waiting).
 
 The words `async` and `await` make sense in the context of `Future`s,
-dotty-cps-async uses this words for every monad but also allows for defining
-custom custom keyword that will make more sense in other contexts.
+dotty-cps-async uses these words for every monad but also allows for defining
+custom keyword that will make more sense in other contexts.
 
 ### Macros
 
@@ -65,16 +65,22 @@ it really hard to understand the fundamentals of the approach by inspecting the
 code. And this is why in this project we will only support the most essential
 and basic language constructs.
 
-## Inferring the async argument type
+## `async` blocks
 
-Let's consider this simplified definition of `async`
+This is the simplified signature of the `async` function which is actually a
+macro.
 
 ```scala
-inline def async[F[_]: Monad, A](inline a: A): F[A] = ???
+inline def async[F[_]: Monad, A](inline a: A): F[A]
 ```
 
-This definition cause some problems when inferring `A` in the callsite, look at
-the following example
+`inline def` is necessary for defining a macro while `inline a` allows to get
+the AST of `a` instead of its value.
+
+### Inferring the async argument type
+
+The presented definition cause some problems when inferring `A` in the callsite,
+look at the following example:
 
 Obviously this cannot compile (what Monad will `a` be wrapped in?)
 
@@ -90,12 +96,15 @@ Now we'd expect this to compile:
 val a = 0
 async[Option]:
   a
+// Not enough type arguments for lib.async[F, A]
+//    expected: [F, A]
+//    actual:   [Option]
 ```
 
 But it does not, the reason is that once we specify `Option` as type parameter
 we also need to specify `A`, even though it is clear that it should be `Int`
 
-This works, but it's suboptimal since the argument type can be easilly inferred
+This works, but it's suboptimal since the type argument can be easilly inferred
 
 ```scala
 val a = 0
@@ -103,21 +112,21 @@ async[Option, Int]:
   a
 ```
 
-The way dotty-cps-async solves this is splitting the two type parameters by
-using a class which "stores" the first type parameter(look at `InferAsyncArg`).
-What they do is something like this:
+The way dotty-cps-async solves this is by splitting the two type parameters
+through a class which "stores" the first type parameter. What they do is
+something like this:
 
 ```scala
 inline def async[F[_]: Monad] = InferAsyncArg.apply
 
 class InferAsyncArg[F[_]: Monad]:
-  inline def apply[A](inline a: A): F[A] = ???
+  inline def apply[A](inline a: A): F[A] = // ...
 ```
 
 In scala >= 3.6.2 this could be rewritten like:
 
 ```scala
-inline def async[F[_]](using Monad[F])[A](inline a: A): F[A] = ???
+inline def async[F[_]](using Monad[F])[A](inline a: A): F[A] = // ...
 ```
 
 ## Trivial transform
