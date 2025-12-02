@@ -8,7 +8,62 @@ Regarding the theory i referred mostly to
 [Project Paper: Embedding generic monadic transformer into Scala](https://ar5iv.labs.arxiv.org/html/2209.10941).
 
 For the implementation part i focused on trying to do it by myself and after
-that compare it to what has been done in dotty-cps-async
+that compare it to what has been done in dotty-cps-async.
+
+## Introduction
+
+What we want to achieve is to be able to turn any monadic program into a
+direct-style program.
+
+This should ease the use of monads for anybody used to the imperative
+programming paradigm while still keeping most of the benefits of functional
+programming.
+
+Monads `flatMap` can be interpreted as a way to chain computations and this
+reminds of continuation passing style (CPS) which is a way of expressing
+programs in which "the next thing to do" is passed to a function which then
+executes it.
+
+Transforming a direct-style program into a CPS program through a monad will
+inject the specific monad behaviour inside that program.
+
+As an example:
+
+```scala
+def getResource(): Future[Resource] = ???
+def updateResource(r: Resource): Future[Resource] = ???
+
+// Monadic program
+getResource().flatMap(r => updateResource(r))
+
+// Direct-style program
+async[Future]:
+  val resource = await(getResource())
+  await(updateResource(resource))
+```
+
+### `async` and `await` keywords
+
+The `async[F]` keyword is used to mark a block of code that will be executed in
+the context of the `F` monad. While the `await` keyword serves the purpose of
+explicitating when the specific monad behaviour happens (in case of the `Future`
+monad that behaviour is suspension of the control flow without busy waiting).
+
+The words `async` and `await` make sense in the context of `Future`s,
+dotty-cps-async uses this words for every monad but also allows for defining
+custom custom keyword that will make more sense in other contexts.
+
+### Macros
+
+dotty-cps-async uses macros to achieve this goal. Macros are a metaprogramming
+tool, basically a way to inspect part of a program and manipulate it at compile
+time in order to generate a different program.
+
+The hard part of using macros is being able to handle every program which can be
+expressed in the target language. dotty-cps-async does that great but it makes
+it really hard to understand the fundamentals of the approach by inspecting the
+code. And this is why in this project we will only support the most essential
+and basic language constructs.
 
 ## Inferring the async argument type
 
