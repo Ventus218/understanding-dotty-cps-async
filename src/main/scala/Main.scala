@@ -1,35 +1,38 @@
 import lib.*
 import scala.concurrent.*
-import State.*
+import State.{flatMap as stateFlatMap, *}
 
 given Monad[Option] with
   def pure[A](a: A): Option[A] = Option(a)
-  def flatMap[A, B](fa: Option[A], f: A => Option[B]): Option[B] = fa.flatMap(f)
+  extension [A](fa: Option[A])
+    def flatMap[B](f: A => Option[B]): Option[B] = fa.flatMap(f)
 
 given Monad[List] with
   def pure[A](a: A): List[A] = List(a)
-  def flatMap[A, B](fa: List[A], f: A => List[B]): List[B] = fa.flatMap(f)
+  extension [A](fa: List[A])
+    def flatMap[B](f: A => List[B]): List[B] = fa.flatMap(f)
 
 given (using ec: ExecutionContext): Monad[Future] with
   def pure[A](a: A): Future[A] = Future(a)(using ec)
-  def flatMap[A, B](fa: Future[A], f: A => Future[B]): Future[B] =
-    fa.flatMap(f)(using ec)
+  extension [A](fa: Future[A])
+    def flatMap[B](f: A => Future[B]): Future[B] =
+      fa.flatMap(f)(using ec)
 
 given [S]: Monad[[A] =>> State[S, A]] with
   def pure[A](a: A): State[S, A] = State.pure(a)
-  def flatMap[A, B](fa: State[S, A], f: A => State[S, B]): State[S, B] =
-    fa.flatMap(f)
+  extension [A](fa: State[S, A])
+    def flatMap[B](f: A => State[S, B]): State[S, B] = fa.stateFlatMap(f)
 
 val m = summon[Monad[Option]]
 
-object Trivial:
+object Trivial extends App:
   val a = 0
   val b = async[Option]:
     a
   val c = async[Option]:
     ""
 
-object Sequential:
+object Sequential extends App:
   val a1 = Option:
     val d = 3
   val a2 = async[Option]:
@@ -65,7 +68,7 @@ object Sequential:
     println("sequential")
     3
 
-object FunctionApplication:
+object FunctionApplication extends App:
   val d1 = async[Option]:
     print("hello")
     val d = 3
@@ -113,7 +116,7 @@ object FunctionApplication:
 //     print("hello")
 //     (a: Int) => a + 1
 
-object Condition:
+object Condition extends App:
   val a1 = Option:
     val cond = true
     if cond then 0

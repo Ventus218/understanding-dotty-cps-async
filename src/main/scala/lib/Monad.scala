@@ -2,6 +2,8 @@ package lib
 
 trait Monad[F[_]]:
   def pure[A](a: A): F[A]
-  def flatMap[A, B](fa: F[A], f: A => F[B]): F[B]
-  def map[A, B](fa: F[A], f: A => B): F[B] =
-    flatMap(fa, a => pure(f(a)))
+
+  extension [A](fa: F[A])
+    def flatMap[B](f: A => F[B]): F[B]
+    def map[B](f: A => B): F[B] =
+      fa.flatMap(a => pure(f(a)))

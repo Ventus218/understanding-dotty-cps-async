@@ -94,7 +94,7 @@ object SequentialTransform:
                     lambdaSymbol
                   )
             ).asExprOf[t => F[A]]
-            '{ $m.flatMap($rhsExpr, $lambda) }
+            '{ $m.flatMap($rhsExpr)($lambda) }
       case (head: Term) :: next =>
         head.tpe.asType match
           case '[t] =>
@@ -109,10 +109,10 @@ object SequentialTransform:
                 // Automatic inference is not able to get the right type parameters
                 loop[F, A](next, expr).asTerm.changeOwner(lambdaSymbol)
             ).asExprOf[t => F[A]]
-            '{ $m.flatMap($termExpr, $lambda) }
+            '{ $m.flatMap($termExpr)($lambda) }
       case head :: next =>
         val block = Block(List(head), loop(next, expr).asTerm)
-        '{ $m.flatMap(${ block.asExprOf[F[A]] }, $m.pure) }
+        '{ $m.flatMap(${ block.asExprOf[F[A]] })($m.pure) }
       case Nil =>
         asyncImpl(expr.asExprOf[A])
 
@@ -136,7 +136,7 @@ object ConditionTransform:
           asyncImpl(term.elsep.asExprOf[A]).asTerm.changeOwner(lambdaSymbol)
         )
     ).asExprOf[Boolean => F[A]]
-    '{ $m.flatMap($conditionExpr, $lambda) }
+    '{ $m.flatMap($conditionExpr)($lambda) }
 
 object FunctionApplicationTransform:
   def apply[F[_]: Type, A: Type](using m: Expr[Monad[F]])(using Quotes)(
@@ -172,7 +172,7 @@ object FunctionApplicationTransform:
                   lambdaSymbol
                 )
             ).asExprOf[t => F[A]]
-            '{ $m.flatMap($argExpr, $lambda) }
+            '{ $m.flatMap($argExpr)($lambda) }
       case Nil => '{ $m.pure(${ Apply(f, transformedArgs).asExprOf[A] }) }
 
 // object LambdaTransform:
@@ -217,11 +217,9 @@ object WhileTransform:
       cond: => F[Boolean],
       body: => F[Unit]
   )(using m: Monad[F]): F[Unit] =
-    m.flatMap(
-      cond,
-      evaluatedCond =>
-        if (evaluatedCond) then m.flatMap(body, _ => whileHelper(cond, body))
-        else m.pure(())
+    m.flatMap(cond)(evaluatedCond =>
+      if (evaluatedCond) then m.flatMap(body)(_ => whileHelper(cond, body))
+      else m.pure(())
     )
 
 object Utils:
