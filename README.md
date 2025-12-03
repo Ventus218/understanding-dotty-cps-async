@@ -192,7 +192,7 @@ object SequentialTransform:
                     lambdaSymbol
                   )
             ).asExprOf[t => F[A]]
-            '{ $m.flatMap($rhsExpr, $lambda) }
+            '{ $m.flatMap($rhsExpr)($lambda) }
       case (head: Term) :: next =>
         head.tpe.asType match
           case '[t] =>
@@ -207,10 +207,10 @@ object SequentialTransform:
                 // Automatic inference is not able to get the right type parameters
                 loop[F, A](next, expr).asTerm.changeOwner(lambdaSymbol)
             ).asExprOf[t => F[A]]
-            '{ $m.flatMap($termExpr, $lambda) }
+            '{ $m.flatMap($termExpr)($lambda) }
       case head :: next =>
         val block = Block(List(head), loop(next, expr).asTerm)
-        '{ $m.flatMap(${ block.asExprOf[F[A]] }, $m.pure) }
+        '{ $m.flatMap(${ block.asExprOf[F[A]] })($m.pure) }
       case Nil =>
         asyncImpl(expr.asExprOf[A])
 ```
@@ -247,16 +247,11 @@ m.flatMap({
   def a(v: Int) = v + 1
   m.flatMap({
     def b(v: Int) = v + 2
-    m.flatMap(
-      m.flatMap(m.pure(3)),
+    m.flatMap(m.flatMap(m.pure(3)))(
       v => m.pure(a(v))
     )
-  },
-  m.pure
-  )
-},
-m.pure
-)
+  })(m.pure)
+})(m.pure)
 ```
 
 `ValDef`s are handled by applying the transform to the right-hand side of the
@@ -352,7 +347,7 @@ async[Option]:
   if true then 0
   else 1
 //becomes:
-m.flatMap(m.pure(true), arg =>
+m.flatMap(m.pure(true))(arg =>
   if arg then 0
   else 1
 )
@@ -398,7 +393,7 @@ object FunctionApplicationTransform:
                   lambdaSymbol
                 )
             ).asExprOf[t => F[A]]
-            '{ $m.flatMap($argExpr, $lambda) }
+            '{ $m.flatMap($argExpr)($lambda) }
       case Nil => '{ $m.pure(${ Apply(f, transformedArgs).asExprOf[A] }) }
 ```
 
@@ -414,18 +409,13 @@ def myF(a: Int, b: Int, c: Int) = a + b + c
 async[Option]:
   myF(1, 2, 3)
 // becomes:
-m.flatMap(
-  m.pure(1),
+m.flatMap(m.pure(1))(
   a =>
-    m.flatMap(
-      m.pure(2),
+    m.flatMap(m.pure(2))(
       b =>
-        m.flatMap(
-          m.pure(3),
+        m.flatMap(m.pure(3))(
           c =>
-            m.pure(
-              myF(a, b, c)
-            )
+            m.pure(myF(a, b, c))
         )
     )
 )
@@ -445,11 +435,9 @@ async[Option]:
   val b = await(Option(5))
   a + b
 // becomes:
-m.flatMap(
-  Option(4),
+m.flatMap(Option(4))(
   a =>
-    m.flatMap(
-      Option(5),
+    m.flatMap(Option(5))(
       // Note that a + b will actually be transformed according to the function application transform
       b => m.pure(a + b)
     )
@@ -510,10 +498,9 @@ object WhileTransform:
       cond: => F[Boolean],
       body: => F[Unit]
   )(using m: Monad[F]): F[Unit] =
-    m.flatMap(
-      cond,
+    m.flatMap(cond)(
       evaluatedCond =>
-        if (evaluatedCond) then m.flatMap(body, _ => whileHelper(cond, body))
+        if (evaluatedCond) then m.flatMap(body)( _ => whileHelper(cond, body))
         else m.pure(())
     )
 ```
