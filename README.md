@@ -225,7 +225,8 @@ Here is the type hirearchy of a `Statement`:
               |               +- ValOrDefDef -+- DefDef
               |                               +- ValDef
               |
-              +- Term
+              +- Term --------+- ...
+                              +- ...
 ```
 
 To keep it simple we only support `ValDef` and `Term` while all the other
@@ -235,51 +236,50 @@ where multiple subsequent statements without `await`s are combined at the same
 nesting level):
 
 ```scala
-object Test:
-  val m = summon[Monad[Option]]
-  async[Option]:
-    def a(v: Int) = v + 1
-    def b(v: Int) = v + 2
-    a(3)
-  // becomes:
+val m = summon[Monad[Option]]
+
+async[Option]:
+  def a(v: Int) = v + 1
+  def b(v: Int) = v + 2
+  a(3)
+// becomes:
+m.flatMap({
+  def a(v: Int) = v + 1
   m.flatMap({
-    def a(v: Int) = v + 1
-    m.flatMap({
-      def b(v: Int) = v + 2
-      m.flatMap(
-        m.flatMap(m.pure(3)),
-        v => m.pure(a(v))
-      )
-    },
-    m.pure
+    def b(v: Int) = v + 2
+    m.flatMap(
+      m.flatMap(m.pure(3)),
+      v => m.pure(a(v))
     )
   },
   m.pure
   )
+},
+m.pure
+)
 ```
 
 `ValDef`s are handled by applying the transform to the right-hand side of the
 `val` definition and then `flatMap` on that passing the continuation:
 
 ```scala
-object Test:
-  val m = summon[Monad[Option]]
-  async[Option]:
-    val a = 1
-    val b = 2
-    a
-  // becomes:
-  m.flatMap(
-    m.pure(1),
-    a => {
-      m.flatMap(
-        m.pure(2),
-        b => {
-          m.pure(a)
-        }
-      )
-    }
-  )
+val m = summon[Monad[Option]]
+async[Option]:
+  val a = 1
+  val b = 2
+  a
+// becomes:
+m.flatMap(
+  m.pure(1),
+  a => {
+    m.flatMap(
+      m.pure(2),
+      b => {
+        m.pure(a)
+      }
+    )
+  }
+)
 ```
 
 We also handle the case in which statements are `Term`s. In the frame of
@@ -293,24 +293,23 @@ The way we handle `Term`s is in principle identical to the way we handled
 there's no need for that.
 
 ```scala
-object Test:
-  val m = summon[Monad[Option]]
-  async[Option]:
-    println("hello")
-    println("sequential")
-    0
-  // becomes:
-  m.flatMap(
-    m.pure(println("hello")),
-    _ => {
-      m.flatMap(
-        m.pure(println("sequential")),
-        _ => {
-          m.pure(0)
-        }
-      )
-    }
-  )
+val m = summon[Monad[Option]]
+async[Option]:
+  println("hello")
+  println("sequential")
+  0
+// becomes:
+m.flatMap(
+  m.pure(println("hello")),
+  _ => {
+    m.flatMap(
+      m.pure(println("sequential")),
+      _ => {
+        m.pure(0)
+      }
+    )
+  }
+)
 ```
 
 > Note that the previous example explains the idea behind this transformation,
@@ -345,17 +344,18 @@ object ConditionTransform:
         )
     ).asExprOf[Boolean => F[A]]
     '{ $m.flatMap($conditionExpr, $lambda) }
+```
 
-object Test:
-  val m = summon[Monad[Option]]
-  async[Option]:
-    if true then 0
-    else 1
-  //becomes:
-  m.flatMap(m.pure(true), arg =>
-    if arg then 0
-    else 1
-  )
+```scala
+val m = summon[Monad[Option]]
+async[Option]:
+  if true then 0
+  else 1
+//becomes:
+m.flatMap(m.pure(true), arg =>
+  if arg then 0
+  else 1
+)
 ```
 
 ## Function application transform
@@ -407,28 +407,28 @@ to transform each argument one by one and for each argument we introduce a
 flatMap nesting level.
 
 ```scala
-  val m = summon[Monad[Option]]
+val m = summon[Monad[Option]]
 
-  def myF(a: Int, b: Int, c: Int) = a + b + c
+def myF(a: Int, b: Int, c: Int) = a + b + c
 
-  async[Option]:
-    myF(1, 2, 3)
-  // becomes:
-  m.flatMap(
-    m.pure(1),
-    a =>
-      m.flatMap(
-        m.pure(2),
-        b =>
-          m.flatMap(
-            m.pure(3),
-            c =>
-              m.pure(
-                myF(a, b, c)
-              )
-          )
-      )
-  )
+async[Option]:
+  myF(1, 2, 3)
+// becomes:
+m.flatMap(
+  m.pure(1),
+  a =>
+    m.flatMap(
+      m.pure(2),
+      b =>
+        m.flatMap(
+          m.pure(3),
+          c =>
+            m.pure(
+              myF(a, b, c)
+            )
+        )
+    )
+)
 ```
 
 ## Handling awaits
