@@ -357,6 +357,8 @@ object ConditionTransform:
     '{ $m.flatMap($conditionExpr, $lambda) }
 ```
 
+**Example:**
+
 ```scala
 val m = summon[Monad[Option]]
 async[Option]:
@@ -416,6 +418,8 @@ object FunctionApplicationTransform:
 To transform a function application in continuation passing style we just need
 to transform each argument one by one and for each argument we introduce a
 flatMap nesting level.
+
+**Example:**
 
 ```scala
 val m = summon[Monad[Option]]
