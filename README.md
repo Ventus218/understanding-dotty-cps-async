@@ -447,6 +447,9 @@ The rationale is that since in the cps transform we always "wrap" expressions
 inside the `F` monad in order to `flatMap` on them, if we have an expression
 `fa` that is already "wrapped" we should just do nothing.
 
+In this way we will `flatMap` on the already wrapped value making it possible to
+access what's inside while also triggering the specific monad behaviour.
+
 ```scala
 val m = summon[Monad[Option]]
 
