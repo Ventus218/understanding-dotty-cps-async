@@ -143,6 +143,22 @@ object TrivialTransform:
     '{ $m.pure(${ term.asExprOf[A] }) }
 ```
 
+**Example:**
+
+```scala
+val m = summon[Monad[Option]]
+
+val a = 0
+val b = async[Option]:
+  a
+val c = async[Option]:
+  ""
+// becomes:
+val a = 0
+val b = m.pure(a)
+val c = m.pure("")
+```
+
 ## Sequential transform
 
 This transformation is responsible for the monadification of sequential blocks
