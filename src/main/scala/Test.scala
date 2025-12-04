@@ -4,25 +4,26 @@ import lib.Monad
 import scala.collection.mutable.Map as MMap
 import java.util.UUID
 import scala.concurrent.*
+import scala.util.Try
 
 case class Ref[A](id: String):
-  def value[F[_]: Monad](using Context[F, A]): A =
-    summon[Context[F, A]].refs(this).get.asInstanceOf[A]
+  def value[F[_]: Monad](using Context[F]): A =
+    summon[Context[F]].refs(this).get.asInstanceOf[A]
 
 object Ref:
   var count = -1
   // def newRef[A]: Ref[A] = Ref(UUID.randomUUID.toString())
   def newRef[A]: Ref[A] = { count += 1; Ref(count.toString()) }
 
-// given [F[_]: Monad, A](using Context[F, A]): Conversion[Ref[A], A] with
+// given [F[_]: Monad, A](using Context[F]): Conversion[Ref[A], A] with
 //   def apply(x: Ref[A]): A = x.value
 
-class Context[F[_]: Monad, A]:
+class Context[F[_]: Monad]:
   var refs = MMap[Ref[?], Option[?]]()
-  var last: Option[(F[A], Ref[?])] = None
+  var last: Option[(F[Any], Ref[?])] = None
 
-def async[F[_], A](block: Context[F, A] ?=> Ref[A])(using m: Monad[F]): F[A] =
-  val c = new Context[F, A]()
+def async[F[_], A](block: Context[F] ?=> Ref[A])(using m: Monad[F]): F[A] =
+  val c = new Context[F]()
   val finalRef = block(using c)
   c.last match
     case Some((fa, ref)) =>
@@ -32,14 +33,14 @@ def async[F[_], A](block: Context[F, A] ?=> Ref[A])(using m: Monad[F]): F[A] =
       )
     case None => m.pure(()).asInstanceOf[F[A]] // TODO: check if always correct
 
-def sync[F[_], A](a: => A)(using Context[F, A])(using m: Monad[F]): Ref[A] =
+def sync[F[_], A](a: => A)(using Context[F])(using m: Monad[F]): Ref[A] =
   await(m.pure(a))
 
-def await[F[_], A](a: => F[A])(using c: Context[F, A], m: Monad[F]): Ref[A] =
+def await[F[_], A](a: => F[A])(using c: Context[F], m: Monad[F]): Ref[A] =
   c.last match
     case None =>
       val ref = Ref.newRef[A]
-      c.last = Some((a, ref))
+      c.last = Some((a.asInstanceOf[F[Any]], ref))
       ref
     case Some((fa, ref)) =>
       val newRef = Ref.newRef[A]
@@ -47,16 +48,16 @@ def await[F[_], A](a: => F[A])(using c: Context[F, A], m: Monad[F]): Ref[A] =
         (
           m.flatMap(fa)(res =>
             c.refs(ref) = Some(res)
-            a
+            a.asInstanceOf[F[Any]]
           ),
           newRef
         )
       )
       newRef
 
-def loop[F[_], A](
-    cond: => Boolean
-)(body: => Unit)(using c: Context[F, A], m: Monad[F]): Unit =
+def loop[F[_], A](cond: => Boolean)(
+    body: => Unit
+)(using c: Context[F], m: Monad[F]): Unit =
   c.last match
     case None =>
       if cond then
@@ -68,15 +69,17 @@ def loop[F[_], A](
         (
           m.map(fa)(res =>
             c.refs(ref) = Some(res)
-            if cond then body.asInstanceOf[A] // TODO: check
-            else ().asInstanceOf[A] // TODO: check
+            if cond then
+              body
+              loop(cond)(body)
+            else ()
           ),
           newRef
         )
       )
 
 def assign[F[_], A](assignedRef: Ref[A], a: => A)(using
-    c: Context[F, A],
+    c: Context[F],
     m: Monad[F]
 ): Unit =
   c.last match
@@ -162,26 +165,25 @@ object Test extends App:
   assert:
     async[Option, Int]:
       loop(false):
-        println("loop")
+        sync(println("loop"))
       sync(5)
     .get == 5
 
-  // assert:
-  //   async[Option, Int]:
-  //     val a = sync(false)
-  //     loop(a.value):
-  //       println("loop")
-  //     sync(5)
-  //   .get == 5
+  assert:
+    async[Option, Int]:
+      val a = sync(false)
+      loop(a.value):
+        sync(println("loop"))
+      sync(5)
+    .get == 5
 
-  // assert:
-  //   async[Option, Int]:
-  //     val a = sync(3)
-  //     loop(a.value < 5):
-  //       println("loop")
-  //       assign(a, a.value + 1)
-  //     sync(a.value)
-  //   .get == 5
+  assert:
+    async[Option, Int]:
+      val a = sync(3)
+      loop(a.value < 7):
+        assign(a, a.value + 1)
+      a
+    .get == 7
 
   given ExecutionContext = ExecutionContext.Implicits.global
   async[Future, Unit]:
@@ -190,3 +192,18 @@ object Test extends App:
     sync(println("1"))
     await(Future(Thread.sleep(300)))
     sync(println("2"))
+
+  async[Future, Int]:
+    sync(println("0"))
+    val a = await(Future({ Thread.sleep(300); 3 }))
+    sync(println("1"))
+    // await(Future(Thread.sleep(300)))
+    sync(println("2"))
+    a
+  .onComplete(res => assert(res == Try(3)))
+
+  val f = Future(Thread.sleep(1))
+  async[Option, Int]:
+    loop(!f.isCompleted):
+      println("loop")
+    sync(3)
