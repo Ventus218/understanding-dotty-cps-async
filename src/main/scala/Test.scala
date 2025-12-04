@@ -1,4 +1,4 @@
-package sos
+package experiments
 
 import lib.Monad
 import scala.collection.mutable.Map as MMap
