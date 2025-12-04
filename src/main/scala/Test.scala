@@ -209,8 +209,8 @@ object Test extends App:
     sync(println("1"))
     await(Future(Thread.sleep(300)))
     sync(println("2"))
+    sync(println())
 
-  println()
   Thread.sleep(1000)
 
   async[Future, Int]:
@@ -219,10 +219,10 @@ object Test extends App:
     sync(println("1"))
     await(Future(Thread.sleep(300)))
     sync(println("2"))
+    sync(println())
     a
   .onComplete(res => assert(res == Try(3)))
 
-  println()
   Thread.sleep(1000)
 
   val f = Future(Thread.sleep(1))
