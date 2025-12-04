@@ -172,6 +172,13 @@ object Test extends App:
       sync(a + b)
     .get == 5
 
+  assert:
+    async[Option, Int]:
+      val a = await(Option(3))
+      val b = await(Option(3))
+      sync(a + b)
+    .get == 6
+
   // // THIS ONE FAILS: List(4, 6, 4, 6)
   // assert:
   //   (async[List, Int]:
