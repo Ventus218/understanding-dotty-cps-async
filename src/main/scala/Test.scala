@@ -3,7 +3,7 @@ package sos
 import lib.Monad
 import scala.collection.mutable.Map as MMap
 import java.util.UUID
-import scala.annotation.threadUnsafe
+import scala.concurrent.*
 
 case class Ref[A](id: String):
   def value[F[_]: Monad](using Context[F, A]): A =
@@ -98,6 +98,12 @@ given Monad[Option] with
   extension [A](fa: Option[A])
     def flatMap[B](f: A => Option[B]): Option[B] = fa.flatMap(f)
 
+given (using ec: ExecutionContext): Monad[Future] with
+  def pure[A](a: A): Future[A] = Future(a)(using ec)
+  extension [A](fa: Future[A])
+    def flatMap[B](f: A => Future[B]): Future[B] =
+      fa.flatMap(f)(using ec)
+
 object Test extends App:
   assert:
     async[Option, Int]:
@@ -176,3 +182,11 @@ object Test extends App:
   //       assign(a, a.value + 1)
   //     sync(a.value)
   //   .get == 5
+
+  given ExecutionContext = ExecutionContext.Implicits.global
+  async[Future, Unit]:
+    sync(println("0"))
+    await(Future(Thread.sleep(300)))
+    sync(println("1"))
+    await(Future(Thread.sleep(300)))
+    sync(println("2"))
